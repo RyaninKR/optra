@@ -8,7 +8,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 from worklog.adapters.base import BaseAdapter
-from worklog.config import settings
+from worklog.config import get_slack_token
 from worklog.models.work_item import ItemType, Source, WorkItem
 
 
@@ -16,7 +16,12 @@ class SlackAdapter(BaseAdapter):
     """Collects messages from Slack channels the bot has access to."""
 
     def __init__(self, token: Optional[str] = None):
-        self._client = WebClient(token=token or settings.slack_bot_token)
+        resolved = token or get_slack_token()
+        if not resolved:
+            raise ValueError(
+                "Slack token not found. Run 'worklog auth slack' or set SLACK_BOT_TOKEN in .env"
+            )
+        self._client = WebClient(token=resolved)
         self._user_cache: dict[str, str] = {}
         self._bot_user_id: Optional[str] = None
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
 import typer
@@ -16,12 +15,84 @@ app = typer.Typer(
     help="Personal work history aggregator",
     no_args_is_help=True,
 )
+auth_app = typer.Typer(help="Connect and manage service accounts")
+app.add_typer(auth_app, name="auth")
+
 console = Console()
+
+
+# ── Auth commands ──────────────────────────────────────────────
+
+
+@auth_app.command("slack")
+def auth_slack() -> None:
+    """Connect to Slack via OAuth (opens browser)."""
+    from worklog.auth.slack_oauth import start
+
+    console.print("[bold]Connecting to Slack...[/bold]")
+    console.print("A browser window will open — please authorize the app.\n")
+
+    ok, msg = start()
+    console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+
+
+@auth_app.command("notion")
+def auth_notion() -> None:
+    """Connect to Notion via OAuth (opens browser)."""
+    from worklog.auth.notion_oauth import start
+
+    console.print("[bold]Connecting to Notion...[/bold]")
+    console.print("A browser window will open — please authorize the app.\n")
+
+    ok, msg = start()
+    console.print(f"[green]{msg}[/green]" if ok else f"[red]{msg}[/red]")
+
+
+@auth_app.command("status")
+def auth_status() -> None:
+    """Show which services are connected."""
+    from worklog.auth.store import list_connections
+
+    connections = list_connections()
+    if not connections:
+        console.print("[yellow]No services connected yet.[/yellow]")
+        console.print("  Run: worklog auth slack")
+        console.print("  Run: worklog auth notion")
+        return
+
+    table = Table(title="Connected Services")
+    table.add_column("Service", style="cyan")
+    table.add_column("Status")
+    table.add_column("Details", style="dim")
+
+    for service, info in connections.items():
+        connected = info.pop("connected", False)
+        status = "[green]Connected[/green]" if connected else "[red]Not connected[/red]"
+        details = ", ".join(f"{k}={v}" for k, v in info.items() if v)
+        table.add_row(service, status, details)
+
+    console.print(table)
+
+
+@auth_app.command("logout")
+def auth_logout(
+    service: str = typer.Argument(help="Service to disconnect (slack/notion)"),
+) -> None:
+    """Disconnect a service."""
+    from worklog.auth.store import remove_token
+
+    remove_token(service)
+    console.print(f"[green]Disconnected from {service}.[/green]")
+
+
+# ── Collect command ────────────────────────────────────────────
 
 
 @app.command()
 def collect(
-    source: Optional[str] = typer.Option(None, "--source", "-s", help="Source to collect from (slack/notion/all)"),
+    source: Optional[str] = typer.Option(
+        None, "--source", "-s", help="Source to collect from (slack/notion/all)"
+    ),
     days: int = typer.Option(7, "--days", "-d", help="Days to look back for initial collection"),
 ) -> None:
     """Collect work items from collaboration tools."""
@@ -31,14 +102,14 @@ def collect(
     run_collect(source_name=src, days=days)
 
 
+# ── Query commands ─────────────────────────────────────────────
+
+
 @app.command()
 def stats() -> None:
     """Show collection statistics."""
     with get_session() as session:
-        stmt = (
-            select(WorkItem.source, func.count(WorkItem.id))
-            .group_by(WorkItem.source)
-        )
+        stmt = select(WorkItem.source, func.count(WorkItem.id)).group_by(WorkItem.source)
         results = session.exec(stmt).all()
 
         if not results:

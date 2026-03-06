@@ -7,6 +7,7 @@ from rich.console import Console
 from sqlmodel import select
 
 from worklog.adapters.base import BaseAdapter
+from worklog.adapters.notion import NotionAdapter
 from worklog.adapters.slack import SlackAdapter
 from worklog.models.db import get_session
 from worklog.models.work_item import Source, WorkItem
@@ -15,6 +16,7 @@ console = Console()
 
 ADAPTER_MAP: dict[str, type[BaseAdapter]] = {
     "slack": SlackAdapter,
+    "notion": NotionAdapter,
 }
 
 
