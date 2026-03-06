@@ -102,6 +102,160 @@ def collect(
     run_collect(source_name=src, days=days)
 
 
+# ── Summary & Insight commands ─────────────────────────────────
+
+
+@app.command()
+def summary(
+    date: Optional[str] = typer.Option(None, "--date", help="Daily summary (YYYY-MM-DD)"),
+    week: Optional[str] = typer.Option(None, "--week", help="Weekly summary (YYYY-Www, e.g. 2026-W10)"),
+    source: Optional[str] = typer.Option(None, "--source", "-s", help="Filter by source"),
+) -> None:
+    """Generate a daily or weekly work summary using LLM."""
+    from worklog.engine.summarizer import daily_summary, weekly_summary
+
+    if not date and not week:
+        # Default to today
+        from datetime import datetime, timezone
+
+        date = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+
+    if date:
+        console.print(f"[bold]Generating daily summary for {date}...[/bold]\n")
+        result = daily_summary(date, source)
+    else:
+        console.print(f"[bold]Generating weekly summary for {week}...[/bold]\n")
+        result = weekly_summary(week, source)  # type: ignore[arg-type]
+
+    console.print(result)
+
+
+@app.command()
+def categorize() -> None:
+    """Auto-categorize uncategorized work items using LLM."""
+    from worklog.engine.summarizer import categorize_uncategorized
+
+    console.print("[bold]Categorizing work items...[/bold]")
+    count = categorize_uncategorized()
+    console.print(f"[green]Categorized {count} items.[/green]")
+
+
+@app.command()
+def insight(
+    month: Optional[str] = typer.Option(None, "--month", help="Month to analyze (YYYY-MM)"),
+    days: int = typer.Option(30, "--days", "-d", help="Days to look back (if --month not set)"),
+) -> None:
+    """Show activity insights (category breakdown, top collaborators)."""
+    from collections import Counter
+    from datetime import datetime, timedelta, timezone
+
+    if month:
+        start = datetime.strptime(f"{month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        # Next month
+        if start.month == 12:
+            end = start.replace(year=start.year + 1, month=1)
+        else:
+            end = start.replace(month=start.month + 1)
+        period_label = month
+    else:
+        end = datetime.now(tz=timezone.utc)
+        start = end - timedelta(days=days)
+        period_label = f"last {days} days"
+
+    with get_session() as session:
+        stmt = (
+            select(WorkItem)
+            .where(WorkItem.timestamp >= start, WorkItem.timestamp < end)
+        )
+        items = list(session.exec(stmt).all())
+
+    if not items:
+        console.print(f"[yellow]{period_label}: no data.[/yellow]")
+        return
+
+    # Category breakdown
+    cat_counter: Counter[str] = Counter()
+    for item in items:
+        cat_counter[item.category or "uncategorized"] += 1
+
+    table_cat = Table(title=f"Category Breakdown ({period_label})")
+    table_cat.add_column("Category", style="cyan")
+    table_cat.add_column("Count", justify="right")
+    table_cat.add_column("Ratio", justify="right", style="dim")
+
+    total = len(items)
+    for cat, count in cat_counter.most_common():
+        pct = f"{count / total * 100:.1f}%"
+        table_cat.add_row(cat, str(count), pct)
+
+    table_cat.add_section()
+    table_cat.add_row("[bold]Total[/bold]", f"[bold]{total}[/bold]", "")
+    console.print(table_cat)
+    console.print()
+
+    # Top collaborators
+    collab_counter: Counter[str] = Counter()
+    for item in items:
+        for p in item.participants:
+            collab_counter[p] += 1
+
+    if collab_counter:
+        table_collab = Table(title=f"Top Collaborators ({period_label})")
+        table_collab.add_column("Person", style="magenta")
+        table_collab.add_column("Interactions", justify="right")
+
+        for person, count in collab_counter.most_common(10):
+            table_collab.add_row(person, str(count))
+
+        console.print(table_collab)
+        console.print()
+
+    # Source breakdown
+    src_counter: Counter[str] = Counter()
+    for item in items:
+        src_counter[item.source] += 1
+
+    table_src = Table(title=f"Source Breakdown ({period_label})")
+    table_src.add_column("Source", style="cyan")
+    table_src.add_column("Count", justify="right")
+
+    for src, count in src_counter.most_common():
+        table_src.add_row(src, str(count))
+
+    console.print(table_src)
+
+
+# ── Search command ─────────────────────────────────────────────
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(help="Search query (e.g. '배포 관련 논의')"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results"),
+) -> None:
+    """Search work items by keyword."""
+    from worklog.engine.search import fts_search
+
+    items = fts_search(query, limit=limit)
+
+    if not items:
+        console.print(f"[yellow]'{query}'에 대한 결과가 없습니다.[/yellow]")
+        return
+
+    table = Table(title=f"Search: '{query}' ({len(items)} results)")
+    table.add_column("Time", style="dim", width=19)
+    table.add_column("Source", style="cyan", width=7)
+    table.add_column("Channel", style="magenta", width=20)
+    table.add_column("Content", max_width=60, no_wrap=True)
+
+    for item in items:
+        ts = item.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        content = item.content[:60].replace("\n", " ")
+        table.add_row(ts, item.source, item.channel_or_space, content)
+
+    console.print(table)
+
+
 # ── Query commands ─────────────────────────────────────────────
 
 
