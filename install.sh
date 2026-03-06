@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ── Optra Installer ──────────────────────────────────────────
-# Usage: curl -sSL https://raw.githubusercontent.com/your-username/optra/main/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/RyaninKR/optra/main/install.sh | bash
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'

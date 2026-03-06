@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/optra"
-Repository = "https://github.com/your-username/optra"
+Homepage = "https://github.com/RyaninKR/optra"
+Repository = "https://github.com/RyaninKR/optra"
 
 [project.scripts]
 optra = "optra.cli:app"
