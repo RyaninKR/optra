@@ -7,12 +7,12 @@ from rich.console import Console
 from rich.table import Table
 from sqlmodel import func, select
 
-from worklog.models.db import get_session
-from worklog.models.work_item import WorkItem
+from optra.models.db import get_session
+from optra.models.work_item import WorkItem
 
 app = typer.Typer(
-    name="worklog",
-    help="Personal work history aggregator",
+    name="optra",
+    help="Aggregate and summarize your work history from Slack, Notion, and more",
     no_args_is_help=True,
 )
 auth_app = typer.Typer(help="Connect and manage service accounts")
@@ -27,7 +27,7 @@ console = Console()
 @auth_app.command("slack")
 def auth_slack() -> None:
     """Connect to Slack via OAuth (opens browser)."""
-    from worklog.auth.slack_oauth import start
+    from optra.auth.slack_oauth import start
 
     console.print("[bold]Connecting to Slack...[/bold]")
     console.print("A browser window will open — please authorize the app.\n")
@@ -39,7 +39,7 @@ def auth_slack() -> None:
 @auth_app.command("notion")
 def auth_notion() -> None:
     """Connect to Notion via OAuth (opens browser)."""
-    from worklog.auth.notion_oauth import start
+    from optra.auth.notion_oauth import start
 
     console.print("[bold]Connecting to Notion...[/bold]")
     console.print("A browser window will open — please authorize the app.\n")
@@ -51,13 +51,13 @@ def auth_notion() -> None:
 @auth_app.command("status")
 def auth_status() -> None:
     """Show which services are connected."""
-    from worklog.auth.store import list_connections
+    from optra.auth.store import list_connections
 
     connections = list_connections()
     if not connections:
         console.print("[yellow]No services connected yet.[/yellow]")
-        console.print("  Run: worklog auth slack")
-        console.print("  Run: worklog auth notion")
+        console.print("  Run: optra auth slack")
+        console.print("  Run: optra auth notion")
         return
 
     table = Table(title="Connected Services")
@@ -79,7 +79,7 @@ def auth_logout(
     service: str = typer.Argument(help="Service to disconnect (slack/notion)"),
 ) -> None:
     """Disconnect a service."""
-    from worklog.auth.store import remove_token
+    from optra.auth.store import remove_token
 
     remove_token(service)
     console.print(f"[green]Disconnected from {service}.[/green]")
@@ -96,7 +96,7 @@ def collect(
     days: int = typer.Option(7, "--days", "-d", help="Days to look back for initial collection"),
 ) -> None:
     """Collect work items from collaboration tools."""
-    from worklog.engine.collector import collect as run_collect
+    from optra.engine.collector import collect as run_collect
 
     src = None if source == "all" else source
     run_collect(source_name=src, days=days)
@@ -112,7 +112,7 @@ def summary(
     source: Optional[str] = typer.Option(None, "--source", "-s", help="Filter by source"),
 ) -> None:
     """Generate a daily or weekly work summary using LLM."""
-    from worklog.engine.summarizer import daily_summary, weekly_summary
+    from optra.engine.summarizer import daily_summary, weekly_summary
 
     if not date and not week:
         # Default to today
@@ -133,7 +133,7 @@ def summary(
 @app.command()
 def categorize() -> None:
     """Auto-categorize uncategorized work items using LLM."""
-    from worklog.engine.summarizer import categorize_uncategorized
+    from optra.engine.summarizer import categorize_uncategorized
 
     console.print("[bold]Categorizing work items...[/bold]")
     count = categorize_uncategorized()
@@ -234,7 +234,7 @@ def search(
     limit: int = typer.Option(20, "--limit", "-n", help="Max results"),
 ) -> None:
     """Search work items by keyword."""
-    from worklog.engine.search import fts_search
+    from optra.engine.search import fts_search
 
     items = fts_search(query, limit=limit)
 
@@ -267,10 +267,10 @@ def stats() -> None:
         results = session.exec(stmt).all()
 
         if not results:
-            console.print("[yellow]No items collected yet. Run 'worklog collect' first.[/yellow]")
+            console.print("[yellow]No items collected yet. Run 'optra collect' first.[/yellow]")
             return
 
-        table = Table(title="WorkLog Statistics")
+        table = Table(title="Optra Statistics")
         table.add_column("Source", style="cyan")
         table.add_column("Items", justify="right", style="green")
 

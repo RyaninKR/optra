@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    # OAuth app credentials (for `worklog auth` flow)
+    # OAuth app credentials (for `optra auth` flow)
     slack_client_id: str = ""
     slack_client_secret: str = ""
     notion_client_id: str = ""
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     notion_token: str = ""
 
     anthropic_api_key: str = ""
-    db_path: Path = Path("worklog.db")
+    db_path: Path = Path.home() / ".optra" / "optra.db"
 
 
 settings = Settings()
@@ -31,13 +31,13 @@ settings = Settings()
 
 def get_slack_token() -> Optional[str]:
     """Resolve Slack token: credential store first, then .env fallback."""
-    from worklog.auth.store import get_token
+    from optra.auth.store import get_token
 
     return get_token("slack") or settings.slack_bot_token or None
 
 
 def get_notion_token() -> Optional[str]:
     """Resolve Notion token: credential store first, then .env fallback."""
-    from worklog.auth.store import get_token
+    from optra.auth.store import get_token
 
     return get_token("notion") or settings.notion_token or None

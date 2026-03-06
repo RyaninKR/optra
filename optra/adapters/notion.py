@@ -7,9 +7,9 @@ from typing import Any, Optional
 from notion_client import Client
 from notion_client.errors import APIResponseError, HTTPResponseError
 
-from worklog.adapters.base import BaseAdapter
-from worklog.config import get_notion_token
-from worklog.models.work_item import ItemType, Source, WorkItem
+from optra.adapters.base import BaseAdapter
+from optra.config import get_notion_token
+from optra.models.work_item import ItemType, Source, WorkItem
 
 
 class NotionAdapter(BaseAdapter):
@@ -21,7 +21,7 @@ class NotionAdapter(BaseAdapter):
         resolved = token or get_notion_token()
         if not resolved:
             raise ValueError(
-                "Notion token not found. Run 'worklog auth notion' or set NOTION_TOKEN in .env"
+                "Notion token not found. Run 'optra auth notion' or set NOTION_TOKEN in .env"
             )
         self._client = Client(auth=resolved)
 

@@ -1,12 +1,12 @@
-"""Local credential storage (~/.worklog/credentials.json)."""
+"""Local credential storage (~/.optra/credentials.json)."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any, Optional
 
-WORKLOG_DIR = Path.home() / ".worklog"
-CREDENTIALS_FILE = WORKLOG_DIR / "credentials.json"
+OPTRA_DIR = Path.home() / ".optra"
+CREDENTIALS_FILE = OPTRA_DIR / "credentials.json"
 
 
 def _load() -> dict[str, Any]:
@@ -16,7 +16,7 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    WORKLOG_DIR.mkdir(parents=True, exist_ok=True)
+    OPTRA_DIR.mkdir(parents=True, exist_ok=True)
     CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
     CREDENTIALS_FILE.chmod(0o600)
 

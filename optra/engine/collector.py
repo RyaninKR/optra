@@ -6,11 +6,11 @@ from typing import Optional
 from rich.console import Console
 from sqlmodel import select
 
-from worklog.adapters.base import BaseAdapter
-from worklog.adapters.notion import NotionAdapter
-from worklog.adapters.slack import SlackAdapter
-from worklog.models.db import get_session
-from worklog.models.work_item import Source, WorkItem
+from optra.adapters.base import BaseAdapter
+from optra.adapters.notion import NotionAdapter
+from optra.adapters.slack import SlackAdapter
+from optra.models.db import get_session
+from optra.models.work_item import Source, WorkItem
 
 console = Console()
 

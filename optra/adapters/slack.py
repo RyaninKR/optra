@@ -7,9 +7,9 @@ from typing import Optional
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from worklog.adapters.base import BaseAdapter
-from worklog.config import get_slack_token
-from worklog.models.work_item import ItemType, Source, WorkItem
+from optra.adapters.base import BaseAdapter
+from optra.config import get_slack_token
+from optra.models.work_item import ItemType, Source, WorkItem
 
 
 class SlackAdapter(BaseAdapter):
@@ -19,7 +19,7 @@ class SlackAdapter(BaseAdapter):
         resolved = token or get_slack_token()
         if not resolved:
             raise ValueError(
-                "Slack token not found. Run 'worklog auth slack' or set SLACK_BOT_TOKEN in .env"
+                "Slack token not found. Run 'optra auth slack' or set SLACK_BOT_TOKEN in .env"
             )
         self._client = WebClient(token=resolved)
         self._user_cache: dict[str, str] = {}

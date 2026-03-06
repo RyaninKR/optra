@@ -6,9 +6,9 @@ import urllib.parse
 
 import httpx
 
-from worklog.auth.server import run_oauth_flow
-from worklog.auth.store import save_token
-from worklog.config import settings
+from optra.auth.server import run_oauth_flow
+from optra.auth.store import save_token
+from optra.config import settings
 
 NOTION_AUTHORIZE_URL = "https://api.notion.com/v1/oauth/authorize"
 NOTION_TOKEN_URL = "https://api.notion.com/v1/oauth/token"

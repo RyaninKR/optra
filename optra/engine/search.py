@@ -4,8 +4,8 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlmodel import select
 
-from worklog.models.db import get_session
-from worklog.models.work_item import WorkItem
+from optra.models.db import get_session
+from optra.models.work_item import WorkItem
 
 
 def sync_fts_index() -> int:

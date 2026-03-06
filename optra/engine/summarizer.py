@@ -8,9 +8,9 @@ import anthropic
 from rich.console import Console
 from sqlmodel import select
 
-from worklog.config import settings
-from worklog.models.db import get_session
-from worklog.models.work_item import WorkItem
+from optra.config import settings
+from optra.models.db import get_session
+from optra.models.work_item import WorkItem
 
 console = Console()
 

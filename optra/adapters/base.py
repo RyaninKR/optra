@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
 
-from worklog.models.work_item import WorkItem
+from optra.models.work_item import WorkItem
 
 
 class BaseAdapter(ABC):
