@@ -13,8 +13,17 @@ from optra.models.work_item import WorkItem
 app = typer.Typer(
     name="optra",
     help="Aggregate and summarize your work history from Slack, Notion, and more",
-    no_args_is_help=True,
+    invoke_without_command=True,
 )
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context) -> None:
+    """Launch the conversational agent (default) or run a subcommand."""
+    if ctx.invoked_subcommand is None:
+        from optra.agent import start
+
+        start()
 auth_app = typer.Typer(help="Connect and manage service accounts")
 app.add_typer(auth_app, name="auth")
 
