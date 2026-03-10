@@ -25,6 +25,7 @@ interface UseChatReturn {
   send: (text: string) => void;
   stop: () => void;
   reset: () => void;
+  loadConversation: (id: string) => Promise<void>;
 }
 
 let msgCounter = 0;
@@ -172,6 +173,33 @@ export function useChat(): UseChatReturn {
     setIsStreaming(false);
   }, []);
 
+  const loadConversation = useCallback(async (id: string) => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setConversationId(data.id);
+      setConversationTitle(data.title);
+
+      const loaded: ChatMessage[] = (data.messages || []).map(
+        (m: { role: string; content: string; tools?: { tool: string; status: string }[] }) => ({
+          id: uid(),
+          role: m.role as MessageRole,
+          content: m.content,
+          tools: m.tools,
+        }),
+      );
+      setMessages(loaded);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
@@ -181,5 +209,5 @@ export function useChat(): UseChatReturn {
     setError(null);
   }, []);
 
-  return { messages, conversationId, conversationTitle, isStreaming, error, send, stop, reset };
+  return { messages, conversationId, conversationTitle, isStreaming, error, send, stop, reset, loadConversation };
 }

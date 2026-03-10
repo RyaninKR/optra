@@ -1,9 +1,5 @@
-import { Hash, Loader2, MessageSquarePlus, Settings, X } from "lucide-react";
-
-interface ConversationItem {
-  id: string;
-  title: string;
-}
+import { Hash, Loader2, MessageSquarePlus, Settings, Trash2, X } from "lucide-react";
+import type { ConversationSummary } from "../hooks/useConversations";
 
 interface ServiceStatus {
   connected: boolean;
@@ -15,8 +11,11 @@ interface Props {
   slackStatus: ServiceStatus;
   notionStatus: ServiceStatus;
   connecting: string | null;
-  currentConversation: ConversationItem | null;
+  conversations: ConversationSummary[];
+  activeConversationId: string | null;
   onNewChat: () => void;
+  onSelectConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
   onConnect: (service: "slack" | "notion") => void;
   onDisconnect: (service: "slack" | "notion") => void;
 }
@@ -25,15 +24,18 @@ export function Sidebar({
   slackStatus,
   notionStatus,
   connecting,
-  currentConversation,
+  conversations,
+  activeConversationId,
   onNewChat,
+  onSelectConversation,
+  onDeleteConversation,
   onConnect,
   onDisconnect,
 }: Props) {
   return (
     <aside className="w-[260px] bg-bg-secondary border-r border-border flex flex-col h-screen shrink-0">
       {/* Top nav */}
-      <div className="p-4 space-y-1">
+      <div className="p-4">
         <button
           onClick={onNewChat}
           className="w-full flex items-center gap-2.5 text-sm text-text-primary hover:bg-bg-hover rounded-lg px-3 py-2 transition-colors"
@@ -44,18 +46,26 @@ export function Sidebar({
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 px-4 overflow-y-auto">
-        <p className="text-[11px] text-text-secondary uppercase tracking-wide mt-4 mb-2 px-3">
+      <div className="flex-1 px-3 overflow-y-auto">
+        <p className="text-[11px] text-text-secondary uppercase tracking-wide mt-2 mb-2 px-2">
           최근 대화
         </p>
-        {currentConversation ? (
-          <div className="text-sm text-text-primary bg-bg-hover rounded-lg px-3 py-2 truncate">
-            {currentConversation.title}
-          </div>
-        ) : (
-          <p className="text-xs text-text-secondary/50 px-3">
+        {conversations.length === 0 ? (
+          <p className="text-xs text-text-secondary/50 px-2">
             대화를 시작해보세요
           </p>
+        ) : (
+          <div className="space-y-0.5">
+            {conversations.map((conv) => (
+              <ConversationRow
+                key={conv.id}
+                conversation={conv}
+                isActive={conv.id === activeConversationId}
+                onSelect={() => onSelectConversation(conv.id)}
+                onDelete={() => onDeleteConversation(conv.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -81,6 +91,41 @@ export function Sidebar({
         />
       </div>
     </aside>
+  );
+}
+
+function ConversationRow({
+  conversation,
+  isActive,
+  onSelect,
+  onDelete,
+}: {
+  conversation: ConversationSummary;
+  isActive: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`group w-full flex items-center text-left text-sm rounded-lg px-2 py-1.5 transition-colors ${
+        isActive
+          ? "bg-bg-hover text-text-primary"
+          : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+      }`}
+    >
+      <span className="truncate flex-1">{conversation.title}</span>
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        className="opacity-0 group-hover:opacity-100 shrink-0 ml-1 p-0.5 text-text-secondary hover:text-red-400 transition-all cursor-pointer"
+        title="삭제"
+      >
+        <Trash2 size={12} />
+      </span>
+    </button>
   );
 }
 
