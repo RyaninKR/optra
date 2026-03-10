@@ -1,12 +1,26 @@
 import { ChatInput } from "./ChatInput";
+import { OnboardingBanner } from "./OnboardingBanner";
 import { QuickActions } from "./QuickActions";
 
 interface Props {
   onSend: (text: string) => void;
   disabled?: boolean;
+  slackConnected: boolean;
+  notionConnected: boolean;
+  connecting: string | null;
+  onConnect: (service: "slack" | "notion") => void;
 }
 
-export function LandingView({ onSend, disabled }: Props) {
+export function LandingView({
+  onSend,
+  disabled,
+  slackConnected,
+  notionConnected,
+  connecting,
+  onConnect,
+}: Props) {
+  const hasAny = slackConnected || notionConnected;
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 pb-20">
       <div className="w-full max-w-xl space-y-6">
@@ -19,14 +33,23 @@ export function LandingView({ onSend, disabled }: Props) {
           </p>
         </div>
 
+        {!hasAny && (
+          <OnboardingBanner
+            slackConnected={slackConnected}
+            notionConnected={notionConnected}
+            connecting={connecting}
+            onConnect={onConnect}
+          />
+        )}
+
         <ChatInput
           onSend={onSend}
           disabled={disabled}
-          placeholder="무엇이든 물어보세요..."
+          placeholder={hasAny ? "무엇이든 물어보세요..." : "서비스를 연결하거나 바로 대화를 시작해보세요..."}
           autoFocus
         />
 
-        <QuickActions onSelect={onSend} />
+        {hasAny && <QuickActions onSelect={onSend} />}
       </div>
     </div>
   );

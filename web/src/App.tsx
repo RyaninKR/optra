@@ -6,7 +6,7 @@ import { Sidebar } from "./components/Sidebar";
 
 export default function App() {
   const { messages, conversationId, conversationTitle, isStreaming, error, send, stop, reset } = useChat();
-  const { status } = useAuth();
+  const { status, connecting, connect, disconnect } = useAuth();
 
   const hasMessages = messages.length > 0;
 
@@ -17,10 +17,13 @@ export default function App() {
   return (
     <div className="flex h-screen bg-bg-primary text-text-primary">
       <Sidebar
-        slackConnected={status.slack.connected}
-        notionConnected={status.notion.connected}
+        slackStatus={status.slack}
+        notionStatus={status.notion}
+        connecting={connecting}
         currentConversation={currentConversation}
         onNewChat={reset}
+        onConnect={connect}
+        onDisconnect={disconnect}
       />
 
       {hasMessages ? (
@@ -32,7 +35,14 @@ export default function App() {
           onStop={stop}
         />
       ) : (
-        <LandingView onSend={send} disabled={isStreaming} />
+        <LandingView
+          onSend={send}
+          disabled={isStreaming}
+          slackConnected={status.slack.connected}
+          notionConnected={status.notion.connected}
+          connecting={connecting}
+          onConnect={connect}
+        />
       )}
     </div>
   );
