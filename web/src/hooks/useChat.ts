@@ -19,9 +19,11 @@ export interface ChatMessage {
 interface UseChatReturn {
   messages: ChatMessage[];
   conversationId: string | null;
+  conversationTitle: string | null;
   isStreaming: boolean;
   error: string | null;
   send: (text: string) => void;
+  stop: () => void;
   reset: () => void;
 }
 
@@ -31,6 +33,7 @@ const uid = () => `msg-${++msgCounter}-${Date.now()}`;
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -116,6 +119,11 @@ export function useChat(): UseChatReturn {
       return;
     }
 
+    if (event === "title") {
+      setConversationTitle(data.title as string);
+      return;
+    }
+
     if (event === "done") return;
 
     if (event === "message") {
@@ -158,13 +166,20 @@ export function useChat(): UseChatReturn {
     }
   }
 
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsStreaming(false);
+  }, []);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setMessages([]);
     setConversationId(null);
+    setConversationTitle(null);
     setIsStreaming(false);
     setError(null);
   }, []);
 
-  return { messages, conversationId, isStreaming, error, send, reset };
+  return { messages, conversationId, conversationTitle, isStreaming, error, send, stop, reset };
 }
