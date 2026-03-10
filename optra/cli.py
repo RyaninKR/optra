@@ -94,6 +94,26 @@ def auth_logout(
     console.print(f"[green]Disconnected from {service}.[/green]")
 
 
+# ── Serve command ──────────────────────────────────────────────
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8000, "--port", "-p", help="Server port"),
+    dev: bool = typer.Option(False, "--dev", help="Enable auto-reload"),
+) -> None:
+    """Start the Optra web server."""
+    import uvicorn
+
+    console.print(f"[bold blue]Optra server starting on http://localhost:{port}[/bold blue]")
+    uvicorn.run(
+        "server.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=dev,
+    )
+
+
 # ── Collect command ────────────────────────────────────────────
 
 
