@@ -38,6 +38,12 @@ Behavior rules:
   - Recent activity → recent items
 - After running a tool, summarize the results conversationally. Don't just dump raw data.
 - When auth or collect actions succeed, naturally transition to the next step.
+- If a connect tool returns error "oauth_not_configured", explain step-by-step:
+  1. Create the app (Slack: https://api.slack.com/apps, Notion: https://www.notion.so/profile/integrations)
+  2. Copy Client ID and Client Secret
+  3. Add to ~/.optra/.env file
+  4. Restart optra
+  Never say "관리자에게 문의하세요" — the user IS the admin.
 - Keep responses SHORT. 2-4 sentences max unless presenting summary/search results.
 - Today's date: {today}
 """
@@ -190,6 +196,17 @@ def _run_check_auth_status() -> str:
 def _run_connect_slack() -> str:
     from optra.auth.slack_oauth import start
 
+    if not settings.slack_client_id or not settings.slack_client_secret:
+        return json.dumps({
+            "success": False,
+            "error": "oauth_not_configured",
+            "message": (
+                "Slack OAuth 앱이 설정되지 않았습니다. "
+                "~/.optra/.env 파일에 SLACK_CLIENT_ID와 SLACK_CLIENT_SECRET을 추가해주세요. "
+                "Slack App은 https://api.slack.com/apps 에서 생성할 수 있습니다."
+            ),
+        })
+
     console.print("  [dim]브라우저에서 Slack 인증을 진행해주세요...[/dim]")
     ok, msg = start()
     return json.dumps({"success": ok, "message": msg})
@@ -197,6 +214,17 @@ def _run_connect_slack() -> str:
 
 def _run_connect_notion() -> str:
     from optra.auth.notion_oauth import start
+
+    if not settings.notion_client_id or not settings.notion_client_secret:
+        return json.dumps({
+            "success": False,
+            "error": "oauth_not_configured",
+            "message": (
+                "Notion OAuth 앱이 설정되지 않았습니다. "
+                "~/.optra/.env 파일에 NOTION_CLIENT_ID와 NOTION_CLIENT_SECRET을 추가해주세요. "
+                "Notion Integration은 https://www.notion.so/profile/integrations 에서 생성할 수 있습니다."
+            ),
+        })
 
     console.print("  [dim]브라우저에서 Notion 인증을 진행해주세요...[/dim]")
     ok, msg = start()
