@@ -1,19 +1,23 @@
-"""Conversational agent powered by Claude with optra tools."""
+"""Optra — 에이전트 네이티브 CLI (Claude Code 스타일)."""
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
 import anthropic
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.spinner import Spinner
 from rich.text import Text
 
 from optra.config import settings
 
 console = Console()
+err_console = Console(stderr=True)
 
 SYSTEM_PROMPT = """\
 You are Optra, a personal work history assistant.
@@ -148,6 +152,19 @@ TOOLS = [
     },
 ]
 
+TOOL_LABELS: dict[str, str] = {
+    "check_auth_status": "연결 상태 확인",
+    "connect_slack": "Slack 연결",
+    "connect_notion": "Notion 연결",
+    "collect_items": "데이터 수집",
+    "generate_summary": "요약 생성",
+    "search_items": "검색",
+    "get_insights": "인사이트 분석",
+    "get_recent_items": "최근 항목 조회",
+    "get_stats": "통계 조회",
+    "categorize_items": "카테고리 분류",
+}
+
 
 # ── Tool implementations ──────────────────────────────────────
 
@@ -173,7 +190,7 @@ def _run_check_auth_status() -> str:
 def _run_connect_slack() -> str:
     from optra.auth.slack_oauth import start
 
-    console.print("[dim]브라우저에서 Slack 인증을 진행해주세요...[/dim]")
+    console.print("  [dim]브라우저에서 Slack 인증을 진행해주세요...[/dim]")
     ok, msg = start()
     return json.dumps({"success": ok, "message": msg})
 
@@ -181,15 +198,16 @@ def _run_connect_slack() -> str:
 def _run_connect_notion() -> str:
     from optra.auth.notion_oauth import start
 
-    console.print("[dim]브라우저에서 Notion 인증을 진행해주세요...[/dim]")
+    console.print("  [dim]브라우저에서 Notion 인증을 진행해주세요...[/dim]")
     ok, msg = start()
     return json.dumps({"success": ok, "message": msg})
 
 
 def _run_collect_items(source: str | None = None, days: int = 7) -> str:
-    from optra.engine.collector import collect as run_collect, save_items, get_last_collected_at, ADAPTER_MAP
-    from optra.models.work_item import Source
     from datetime import timedelta
+
+    from optra.engine.collector import ADAPTER_MAP, get_last_collected_at, save_items
+    from optra.models.work_item import Source
 
     sources = [source] if source else list(ADAPTER_MAP.keys())
     total_fetched = 0
@@ -253,23 +271,25 @@ def _run_search_items(query: str, limit: int = 10) -> str:
 def _run_get_insights(month: str | None = None, days: int = 30) -> str:
     from collections import Counter
     from datetime import timedelta
+
     from sqlmodel import select
+
     from optra.models.db import get_session
     from optra.models.work_item import WorkItem
 
     if month:
-        start = datetime.strptime(f"{month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        if start.month == 12:
-            end = start.replace(year=start.year + 1, month=1)
+        start_dt = datetime.strptime(f"{month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if start_dt.month == 12:
+            end = start_dt.replace(year=start_dt.year + 1, month=1)
         else:
-            end = start.replace(month=start.month + 1)
+            end = start_dt.replace(month=start_dt.month + 1)
     else:
         end = datetime.now(tz=timezone.utc)
-        start = end - timedelta(days=days)
+        start_dt = end - timedelta(days=days)
 
     with get_session() as session:
         items = list(session.exec(
-            select(WorkItem).where(WorkItem.timestamp >= start, WorkItem.timestamp < end)
+            select(WorkItem).where(WorkItem.timestamp >= start_dt, WorkItem.timestamp < end)
         ).all())
 
     if not items:
@@ -295,6 +315,7 @@ def _run_get_insights(month: str | None = None, days: int = 30) -> str:
 
 def _run_get_recent_items(limit: int = 10, source: str | None = None) -> str:
     from sqlmodel import select
+
     from optra.models.db import get_session
     from optra.models.work_item import WorkItem
 
@@ -317,7 +338,8 @@ def _run_get_recent_items(limit: int = 10, source: str | None = None) -> str:
 
 
 def _run_get_stats() -> str:
-    from sqlmodel import select, func
+    from sqlmodel import func, select
+
     from optra.models.db import get_session
     from optra.models.work_item import WorkItem
 
@@ -355,101 +377,248 @@ TOOL_HANDLERS: dict[str, Any] = {
 }
 
 
-# ── Agent loop ─────────────────────────────────────────────────
+# ── Tool execution with display ───────────────────────────────
 
 
 def _execute_tool(name: str, input_args: dict) -> str:
     handler = TOOL_HANDLERS.get(name)
     if not handler:
         return json.dumps({"error": f"Unknown tool: {name}"})
-    try:
-        return handler(**input_args)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+
+    label = TOOL_LABELS.get(name, name)
+
+    with Live(
+        Spinner("dots", text=Text(f" {label}...", style="dim")),
+        console=err_console,
+        transient=True,
+    ):
+        try:
+            result = handler(**input_args)
+        except Exception as e:
+            result = json.dumps({"error": str(e)})
+
+    # Show completion
+    err_console.print(f"  [green]✓[/green] [dim]{label}[/dim]")
+    return result
 
 
-def start() -> None:
-    """Launch the conversational agent."""
+# ── Streaming output ──────────────────────────────────────────
+
+
+def _stream_response(
+    client: anthropic.Anthropic,
+    system: str,
+    messages: list[dict],
+    max_turns: int = 10,
+) -> None:
+    """Run Claude tool_use loop with streaming text output."""
+    for _ in range(max_turns):
+        text_chunks: list[str] = []
+        tool_uses: list[dict] = []
+        current_tool: dict = {}
+        stop_reason = None
+
+        with client.messages.stream(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            system=system,
+            tools=TOOLS,
+            messages=messages,
+        ) as stream:
+            for event in stream:
+                if event.type == "content_block_start":
+                    if event.content_block.type == "tool_use":
+                        current_tool = {
+                            "id": event.content_block.id,
+                            "name": event.content_block.name,
+                            "input_json": "",
+                        }
+                    elif event.content_block.type == "text":
+                        pass  # Will receive deltas
+
+                elif event.type == "content_block_delta":
+                    if event.delta.type == "text_delta":
+                        text = event.delta.text
+                        text_chunks.append(text)
+                        # Stream text directly to terminal
+                        err_console.print(text, end="", highlight=False)
+                    elif event.delta.type == "input_json_delta":
+                        current_tool["input_json"] += event.delta.partial_json
+
+                elif event.type == "content_block_stop":
+                    if current_tool:
+                        try:
+                            input_args = json.loads(current_tool["input_json"]) if current_tool["input_json"] else {}
+                        except json.JSONDecodeError:
+                            input_args = {}
+                        tool_uses.append({
+                            "id": current_tool["id"],
+                            "name": current_tool["name"],
+                            "input": input_args,
+                        })
+                        current_tool = {}
+
+                elif event.type == "message_delta":
+                    stop_reason = event.delta.stop_reason
+
+        # End the streamed line
+        full_text = "".join(text_chunks)
+        if full_text.strip():
+            err_console.print()  # newline after streamed text
+
+        # Build assistant message for history
+        assistant_content = stream.get_final_message().content
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        if stop_reason == "tool_use":
+            # Execute tools
+            tool_results = []
+            for tool in tool_uses:
+                result = _execute_tool(tool["name"], tool["input"])
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool["id"],
+                    "content": result,
+                })
+            messages.append({"role": "user", "content": tool_results})
+            continue  # Let Claude process tool results
+
+        # Done — end_turn
+        break
+
+
+# ── Slash commands ────────────────────────────────────────────
+
+SLASH_HELP = """\
+[bold]슬래시 커맨드[/bold]
+  [cyan]/help[/cyan]    이 도움말 표시
+  [cyan]/status[/cyan]  연결 상태 확인
+  [cyan]/clear[/cyan]   대화 기록 초기화
+  [cyan]/quit[/cyan]    종료
+"""
+
+
+def _handle_slash(cmd: str, messages: list[dict]) -> bool:
+    """Handle slash commands. Returns True if handled."""
+    cmd = cmd.strip().lower()
+
+    if cmd in ("/help", "/도움"):
+        err_console.print(SLASH_HELP)
+        return True
+
+    if cmd in ("/status", "/상태"):
+        from optra.auth.store import list_connections
+
+        connections = list_connections()
+        connected = [s for s, info in connections.items() if info.get("connected")]
+        if connected:
+            err_console.print(f"  [green]연결됨:[/green] {', '.join(connected)}")
+        else:
+            err_console.print("  [yellow]연결된 서비스 없음[/yellow]")
+        return True
+
+    if cmd in ("/clear", "/초기화"):
+        messages.clear()
+        err_console.print("  [dim]대화 기록이 초기화되었습니다.[/dim]")
+        return True
+
+    if cmd in ("/quit", "/exit", "/종료"):
+        raise SystemExit(0)
+
+    return False
+
+
+# ── Entry point ───────────────────────────────────────────────
+
+
+def _print_header() -> None:
+    """Display the startup header."""
+    from optra.auth.store import list_connections
+
+    connections = list_connections()
+    connected = [s for s, info in connections.items() if info.get("connected")]
+
+    status_parts = []
+    for svc in ("slack", "notion"):
+        if svc in connected:
+            status_parts.append(f"[green]●[/green] {svc.title()}")
+        else:
+            status_parts.append(f"[dim]○ {svc.title()}[/dim]")
+
+    status_line = "  ".join(status_parts)
+
+    err_console.print()
+    err_console.print(f"  [bold]Optra[/bold] [dim]— 업무 히스토리 어시스턴트[/dim]")
+    err_console.print(f"  {status_line}")
+    err_console.print(f"  [dim]/help 도움말  ·  Ctrl+C 종료[/dim]")
+    err_console.print()
+
+
+def start(query: str | None = None) -> None:
+    """Launch the conversational agent.
+
+    Args:
+        query: If provided, run single-shot mode (answer and exit).
+    """
     if not settings.anthropic_api_key:
-        console.print(Panel(
+        err_console.print(Panel(
             "[bold red]ANTHROPIC_API_KEY가 설정되지 않았습니다.[/bold red]\n\n"
             "1. https://console.anthropic.com/ 에서 API 키 발급\n"
             "2. 환경변수 설정: [bold]export ANTHROPIC_API_KEY=sk-ant-...[/bold]\n"
             "   또는 ~/.optra/.env 파일에 추가",
-            title="Setup Required",
+            title="설정 필요",
+            border_style="red",
         ))
-        return
+        sys.exit(1)
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
     system = SYSTEM_PROMPT.format(today=today)
-
     messages: list[dict] = []
 
-    console.print()
-    console.print(Panel(
-        "[bold]Optra[/bold]  —  업무 히스토리 어시스턴트\n"
-        "[dim]자연어로 질문하세요. 종료: Ctrl+C[/dim]",
-        border_style="blue",
-    ))
-    console.print()
+    # ── Single-shot mode ──
+    if query:
+        messages.append({"role": "user", "content": query})
+        try:
+            _stream_response(client, system, messages)
+        except KeyboardInterrupt:
+            err_console.print()
+        return
 
-    # Kick off with an empty user message to trigger onboarding
+    # ── Interactive mode ──
+    _print_header()
+
+    # Kick off onboarding
     messages.append({"role": "user", "content": "시작"})
-
     try:
-        while True:
-            # Call Claude
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                system=system,
-                tools=TOOLS,
-                messages=messages,
-            )
+        _stream_response(client, system, messages)
+    except KeyboardInterrupt:
+        err_console.print()
 
-            # Process response
-            assistant_content = response.content
-            messages.append({"role": "assistant", "content": assistant_content})
+    while True:
+        err_console.print()
+        try:
+            user_input = console.input("[bold orange3]>[/bold orange3] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            err_console.print("\n  [dim]종료합니다.[/dim]")
+            break
 
-            # Handle tool use
-            if response.stop_reason == "tool_use":
-                tool_results = []
-                for block in assistant_content:
-                    if block.type == "text" and block.text.strip():
-                        console.print(Markdown(block.text))
-                    elif block.type == "tool_use":
-                        result = _execute_tool(block.name, block.input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        })
-                messages.append({"role": "user", "content": tool_results})
-                continue  # Let Claude process tool results
+        if not user_input:
+            continue
 
-            # Display text response
-            for block in assistant_content:
-                if block.type == "text" and block.text.strip():
-                    console.print()
-                    console.print(Markdown(block.text))
-                    console.print()
-
-            # Get user input
-            try:
-                user_input = console.input("[bold blue]>[/bold blue] ").strip()
-            except (EOFError, KeyboardInterrupt):
-                console.print("\n[dim]Bye![/dim]")
-                break
-
-            if not user_input:
+        # Slash commands
+        if user_input.startswith("/"):
+            if _handle_slash(user_input, messages):
                 continue
 
-            if user_input.lower() in ("exit", "quit", "종료", "나가기"):
-                console.print("[dim]Bye![/dim]")
-                break
+        messages.append({"role": "user", "content": user_input})
 
-            messages.append({"role": "user", "content": user_input})
-
-    except KeyboardInterrupt:
-        console.print("\n[dim]Bye![/dim]")
+        err_console.print()
+        try:
+            _stream_response(client, system, messages)
+        except KeyboardInterrupt:
+            err_console.print("\n  [dim]생성 중단[/dim]")
+            continue
+        except anthropic.APIError as e:
+            err_console.print(f"\n  [red]API 오류: {e}[/red]")
+            continue
