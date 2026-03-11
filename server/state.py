@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 
 
 @dataclass
@@ -22,7 +24,7 @@ def create_conversation() -> Conversation:
         id=str(uuid.uuid4()),
         title="새 대화",
         messages=[],
-        created_at=datetime.now(tz=timezone.utc),
+        created_at=datetime.now(tz=KST),
     )
     _conversations[conv.id] = conv
     return conv

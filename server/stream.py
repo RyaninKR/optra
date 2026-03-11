@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import AsyncGenerator
 
 import anthropic
@@ -43,7 +45,7 @@ async def stream_response(conv: Conversation) -> AsyncGenerator[str, None]:
         return
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(tz=KST).strftime("%Y-%m-%d")
     system = SYSTEM_PROMPT.format(today=today)
 
     max_turns = 10  # Safety limit for tool_use loops

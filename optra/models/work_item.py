@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from enum import Enum
 from typing import Optional
 
@@ -34,5 +36,5 @@ class WorkItem(SQLModel, table=True):
     channel_or_space: str = ""
     participants: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     timestamp: datetime
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(KST))
     metadata_: dict = Field(default_factory=dict, sa_column=Column("metadata", JSON))

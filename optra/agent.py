@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import Any
 
 import anthropic
@@ -306,7 +308,7 @@ def _run_collect_items(source: str | None = None, days: int = 7) -> str:
         adapter = ADAPTER_MAP[src]()
         source_enum = Source(src)
         last_ts = get_last_collected_at(source_enum)
-        since = last_ts if last_ts else datetime.now(tz=timezone.utc) - timedelta(days=days)
+        since = last_ts if last_ts else datetime.now(tz=KST) - timedelta(days=days)
 
         try:
             items = adapter.collect(since=since)
@@ -333,7 +335,7 @@ def _run_generate_summary(
         if week:
             result = weekly_summary(week, source)
         else:
-            d = date or datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+            d = date or datetime.now(tz=KST).strftime("%Y-%m-%d")
             result = daily_summary(d, source)
         return json.dumps({"success": True, "summary": result})
     except Exception as e:
@@ -365,13 +367,13 @@ def _run_get_insights(month: str | None = None, days: int = 30) -> str:
     from optra.models.work_item import WorkItem
 
     if month:
-        start_dt = datetime.strptime(f"{month}-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        start_dt = datetime.strptime(f"{month}-01", "%Y-%m-%d").replace(tzinfo=KST)
         if start_dt.month == 12:
             end = start_dt.replace(year=start_dt.year + 1, month=1)
         else:
             end = start_dt.replace(month=start_dt.month + 1)
     else:
-        end = datetime.now(tz=timezone.utc)
+        end = datetime.now(tz=KST)
         start_dt = end - timedelta(days=days)
 
     with get_session() as session:
@@ -727,7 +729,7 @@ def start(query: str | None = None) -> None:
     from optra.profile import get_profile
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(tz=KST).strftime("%Y-%m-%d")
 
     profile = get_profile()
     if profile.get("slack_user_id"):

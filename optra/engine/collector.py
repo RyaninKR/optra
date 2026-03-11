@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import Optional
 
 from rich.console import Console
@@ -80,7 +82,7 @@ def collect(source_name: Optional[str] = None, days: int = 7) -> None:
             since = last_ts
             console.print(f"  Incremental collection since {since.isoformat()}")
         else:
-            since = datetime.now(tz=timezone.utc) - timedelta(days=days)
+            since = datetime.now(tz=KST) - timedelta(days=days)
             console.print(f"  Initial collection: last {days} days")
 
         items = adapter.collect(since=since)

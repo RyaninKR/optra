@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import Any, Optional
 
 from notion_client import Client
@@ -149,7 +151,7 @@ class NotionAdapter(BaseAdapter):
             for page in resp.get("results", []):
                 last_edited = page.get("last_edited_time", "")
                 if since and last_edited:
-                    edited_dt = datetime.fromisoformat(last_edited.replace("Z", "+00:00"))
+                    edited_dt = datetime.fromisoformat(last_edited.replace("Z", "+00:00")).astimezone(KST)
                     if edited_dt < since:
                         # Pages are sorted by last_edited descending, so we can stop
                         return pages
@@ -174,7 +176,7 @@ class NotionAdapter(BaseAdapter):
 
         created_time = page.get("created_time", "")
         last_edited = page.get("last_edited_time", created_time)
-        timestamp = datetime.fromisoformat(last_edited.replace("Z", "+00:00"))
+        timestamp = datetime.fromisoformat(last_edited.replace("Z", "+00:00")).astimezone(KST)
 
         return WorkItem(
             source=Source.notion,

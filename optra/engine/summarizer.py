@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import Optional
 
 import anthropic
@@ -124,7 +126,7 @@ def _query_items(
 
 def daily_summary(date_str: str, source: Optional[str] = None) -> str:
     """Generate a daily summary for the given date (YYYY-MM-DD)."""
-    date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=KST)
     next_day = date + timedelta(days=1)
 
     items = _query_items(date, next_day, source)
@@ -148,7 +150,7 @@ def daily_summary(date_str: str, source: Optional[str] = None) -> str:
 def weekly_summary(week_str: str, source: Optional[str] = None) -> str:
     """Generate a weekly summary for the given ISO week (YYYY-Www)."""
     year, week = week_str.split("-W")
-    start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w").replace(tzinfo=timezone.utc)
+    start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w").replace(tzinfo=KST)
     end = start + timedelta(days=7)
 
     items = _query_items(start, end, source)

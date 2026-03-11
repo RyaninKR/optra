@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 from typing import Optional
 
 from slack_sdk import WebClient
@@ -157,7 +159,7 @@ class SlackAdapter(BaseAdapter):
             content=msg.get("text", ""),
             channel_or_space=channel_name,
             participants=[self._resolve_user(user_id)] if user_id != "unknown" else [],
-            timestamp=datetime.fromtimestamp(ts, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(ts, tz=KST),
             metadata_={
                 "channel_id": msg.get("channel", ""),
                 "thread_ts": msg.get("thread_ts"),
