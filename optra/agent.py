@@ -26,10 +26,17 @@ You help users collect, search, summarize, and understand their work activities 
 Behavior rules:
 - Always respond in Korean (한국어).
 - Be concise, friendly, and proactive.
-- On the very first interaction, call check_auth_status to see what's connected.
-  - If nothing is connected, naturally guide the user to connect Slack or Notion.
-  - If connected but no data collected yet, offer to collect.
-  - If data exists, greet and ask how you can help.
+- On the very first interaction:
+  1. Call get_user_profile to check if user identity is set up.
+  2. Call check_auth_status to see what's connected.
+  3. If profile has no slack_user_id/notion_user_id but services are connected:
+     → Ask the user for their Slack display name or nickname.
+     → Use lookup_slack_user to find them, confirm with the user, then save_user_profile.
+  4. If nothing is connected, guide to connect first. After connecting, ask for identity.
+  5. If profile and connections exist but no data, offer to collect.
+  6. If everything is set up, greet and ask how you can help.
+- The user profile (slack_user_id, display_name) is critical — it determines whose
+  work history to focus on in summaries and searches. Always complete this setup.
 - When the user asks about their work, decide which tool to use:
   - Specific date → daily summary
   - A week → weekly summary
@@ -46,7 +53,7 @@ Behavior rules:
   Never say "관리자에게 문의하세요" — the user IS the admin.
 - Keep responses SHORT. 2-4 sentences max unless presenting summary/search results.
 - Today's date: {today}
-"""
+{user_context}"""
 
 TOOLS = [
     {
@@ -156,6 +163,55 @@ TOOLS = [
         "description": "Auto-categorize uncategorized work items using LLM.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "get_user_profile",
+        "description": "Get the stored user profile (Slack/Notion identity).",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "lookup_slack_user",
+        "description": "Search Slack workspace members by display name or real name. Returns matching users.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Name or nickname to search for (partial match).",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "save_user_profile",
+        "description": "Save the user's identity for tracking their work history.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slack_user_id": {
+                    "type": "string",
+                    "description": "Slack user ID (e.g. U082Y6J8S3S).",
+                },
+                "slack_display_name": {
+                    "type": "string",
+                    "description": "Slack display name.",
+                },
+                "slack_real_name": {
+                    "type": "string",
+                    "description": "Slack real name.",
+                },
+                "notion_user_id": {
+                    "type": "string",
+                    "description": "Notion user ID.",
+                },
+                "notion_name": {
+                    "type": "string",
+                    "description": "Notion display name.",
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 TOOL_LABELS: dict[str, str] = {
@@ -169,6 +225,9 @@ TOOL_LABELS: dict[str, str] = {
     "get_recent_items": "최근 항목 조회",
     "get_stats": "통계 조회",
     "categorize_items": "카테고리 분류",
+    "get_user_profile": "사용자 프로필 조회",
+    "lookup_slack_user": "Slack 사용자 검색",
+    "save_user_profile": "사용자 프로필 저장",
 }
 
 
@@ -391,6 +450,62 @@ def _run_categorize_items() -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def _run_get_user_profile() -> str:
+    from optra.profile import get_profile
+
+    profile = get_profile()
+    if not profile:
+        return json.dumps({"configured": False, "message": "No user profile set up yet."})
+    return json.dumps({"configured": True, **profile})
+
+
+def _run_lookup_slack_user(query: str) -> str:
+    from optra.config import get_slack_token
+
+    token = get_slack_token()
+    if not token:
+        return json.dumps({"error": "Slack not connected. Connect first."})
+
+    from slack_sdk import WebClient
+
+    client = WebClient(token=token)
+    query_lower = query.lower()
+
+    matches = []
+    cursor = None
+    while True:
+        resp = client.users_list(limit=200, cursor=cursor)
+        for member in resp.get("members", []):
+            if member.get("is_bot") or member.get("deleted"):
+                continue
+            profile = member.get("profile", {})
+            display_name = profile.get("display_name", "")
+            real_name = profile.get("real_name", "")
+
+            if (
+                query_lower in display_name.lower()
+                or query_lower in real_name.lower()
+            ):
+                matches.append({
+                    "user_id": member["id"],
+                    "display_name": display_name,
+                    "real_name": real_name,
+                })
+
+        cursor = resp.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+
+    return json.dumps({"query": query, "count": len(matches), "users": matches[:10]})
+
+
+def _run_save_user_profile(**kwargs: Any) -> str:
+    from optra.profile import save_profile
+
+    save_profile(**kwargs)
+    return json.dumps({"success": True, "saved": kwargs})
+
+
 TOOL_HANDLERS: dict[str, Any] = {
     "check_auth_status": lambda **_: _run_check_auth_status(),
     "connect_slack": lambda **_: _run_connect_slack(),
@@ -402,6 +517,9 @@ TOOL_HANDLERS: dict[str, Any] = {
     "get_recent_items": lambda **kw: _run_get_recent_items(kw.get("limit", 10), kw.get("source")),
     "get_stats": lambda **_: _run_get_stats(),
     "categorize_items": lambda **_: _run_categorize_items(),
+    "get_user_profile": lambda **_: _run_get_user_profile(),
+    "lookup_slack_user": lambda **kw: _run_lookup_slack_user(kw["query"]),
+    "save_user_profile": lambda **kw: _run_save_user_profile(**kw),
 }
 
 
@@ -562,6 +680,7 @@ def _handle_slash(cmd: str, messages: list[dict]) -> bool:
 def _print_header() -> None:
     """Display the startup header."""
     from optra.auth.store import list_connections
+    from optra.profile import get_profile
 
     connections = list_connections()
     connected = [s for s, info in connections.items() if info.get("connected")]
@@ -575,9 +694,15 @@ def _print_header() -> None:
 
     status_line = "  ".join(status_parts)
 
+    profile = get_profile()
+    user_name = profile.get("slack_display_name") or profile.get("slack_real_name") or profile.get("notion_name")
+
     err_console.print()
     err_console.print(f"  [bold]Optra[/bold] [dim]— 업무 히스토리 어시스턴트[/dim]")
-    err_console.print(f"  {status_line}")
+    if user_name:
+        err_console.print(f"  [dim]사용자:[/dim] {user_name}  {status_line}")
+    else:
+        err_console.print(f"  {status_line}")
     err_console.print(f"  [dim]/help 도움말  ·  Ctrl+C 종료[/dim]")
     err_console.print()
 
@@ -599,9 +724,22 @@ def start(query: str | None = None) -> None:
         ))
         sys.exit(1)
 
+    from optra.profile import get_profile
+
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-    system = SYSTEM_PROMPT.format(today=today)
+
+    profile = get_profile()
+    if profile.get("slack_user_id"):
+        user_context = (
+            f"- Current user: {profile.get('slack_display_name') or profile.get('slack_real_name', 'unknown')} "
+            f"(Slack ID: {profile['slack_user_id']}). "
+            "Focus summaries and searches on this user's activities."
+        )
+    else:
+        user_context = ""
+
+    system = SYSTEM_PROMPT.format(today=today, user_context=user_context)
     messages: list[dict] = []
 
     # ── Single-shot mode ──
